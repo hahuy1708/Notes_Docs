@@ -1,0 +1,3 @@
+**REST** (Representational State Transfer) is an architectural style for designing networked applications, providing a standardized approach for systems to communicate over HTTP. Introduced by Roy Fielding in his 2000 doctoral dissertation, REST has become the dominant paradigm for building web APIs, offering a simpler alternative to previous protocols like SOAP.
+
+**Key Point**: REST is not a protocol or a standard, but an architectural style that leverages existing web standards (primarily HTTP) to create a consistent approach for client-server communication.
