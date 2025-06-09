@@ -3,46 +3,117 @@
 ## sp_CreateOrder
 
 - **Mục đích**: Xử lý việc tạo hóa đơn bán hàng kết hợp với cập nhật tồn kho và ghi nhận chi tiết đơn hàng.
-  
+
 **Các bước thực hiện:**
 
-### 1. Kiểm tra đầu vào:
+### 1. Kiểm tra và xử lý đầu vào:
 
-- Xác thực rằng các tham số bắt buộc (@CustomerID, @EmployeeID, @ProductList) không được để trống.
-- Nếu thiếu thông tin, sử dụng lệnh THROW để trả về lỗi.
+- Nhận chuỗi JSON chứa danh sách sản phẩm đặt hàng, gồm các trường `productId`, `quantity`, `price`, và `customerId`.
+- Dữ liệu JSON được phân tích qua `OPENJSON` và tải vào bảng tạm `@OrderProducts`.
+- Kiểm tra xem bảng tạm có dữ liệu không (báo lỗi nếu danh sách trống).
+- Xác thực rằng các tham số bắt buộc (`customerId`, `employeeId`) không được để trống.
 
-### 2. Xác thực sự tồn tại của khách hàng và nhân viên:
+### 2. Xác thực dữ liệu:
 
-- Truy vấn bảng Customer và Employee để đảm bảo khởi tạo đơn hàng chỉ với những người đã tồn tại trong hệ thống.
+- Kiểm tra sự tồn tại của khách hàng (`Customer`) dựa vào `customerId`.
+- Kiểm tra sự tồn tại của nhân viên (`Employee`) thực hiện thao tác bán hàng.
+- Nếu bất kỳ điều kiện nào không hợp lệ, sử dụng `THROW` để ném lỗi.
 
-### 3. Xử lý JSON:
+### 3. Giao dịch và tạo hóa đơn:
 
-- Sử dụng hàm OPENJSON để phân tích chuỗi JSON chứa danh sách sản phẩm.
-- Các sản phẩm được tải vào một bảng tạm @OrderProducts với các cột: Product_Id, Quantity, và Price.
+- Bắt đầu giao dịch với `BEGIN TRANSACTION` để đảm bảo tất cả các thao tác được thực hiện nguyên tử.
+- Tạo một bản ghi mới trong **Receipt** để lưu ngày tạo hóa đơn, nhân viên thực hiện, và khách hàng đặt hàng.
+- Lấy mã hóa đơn mới tạo qua `SCOPE_IDENTITY()`.
+
+### 4. Kiểm tra tính hợp lệ của sản phẩm:
+
+- So sánh từng `ProductId` trong bảng tạm với bảng **Product**.
+- Nếu có sản phẩm không tồn tại, tổng hợp thông báo lỗi và `ROLLBACK TRANSACTION`.
+- Kiểm tra tồn kho của từng sản phẩm, nếu số lượng đặt vượt quá tồn kho, thông báo lỗi và `ROLLBACK TRANSACTION`.
+
+### 5. Ghi nhận chi tiết đơn hàng:
+
+- Chèn dữ liệu vào bảng **Details**, gồm thông tin sản phẩm, số lượng, giá bán và liên kết với hóa đơn (`Receipt_Id`).
+
+### 6. Cập nhật tồn kho:
+
+- Giảm số lượng tồn kho của sản phẩm trong bảng **Product** bằng số lượng đặt hàng.
+
+### 7. Kết thúc giao dịch:
+
+- Nếu tất cả các bước trên đều thành công, giao dịch được `COMMIT`.
+- Nếu có lỗi trong quá trình thực hiện, giao dịch sẽ được `ROLLBACK`.
+
+### 8. Trả thông tin kết quả:
+
+- Truy vấn bảng **Receipt**, **Customer**, **Employee**, và **Details** để trả về thông tin tổng hợp của hóa đơn bán hàng.
+- Truy vấn chi tiết từng sản phẩm đặt gồm số lượng, đơn giá, và tổng giá trị đơn hàng.
   
-### 4. Kiểm tra tồn tại của sản phẩm và số lượng:
-
-- So sánh các Product_Id nhận được với bảng Product. Nếu có sản phẩm không tồn tại, tổng hợp thông báo lỗi và ném ngoại lệ.
-- Kiểm tra tồn kho của từng sản phẩm, nếu số lượng trong kho không đủ so với yêu cầu đặt hàng, cũng sẽ phát sinh lỗi thông báo cụ thể.
-
-### 5. Tạo hóa đơn bán hàng:
-
-- Chèn một bản ghi vào bảng Receipt với thông tin khách hàng, nhân viên, ngày tạo và tổng hóa đơn.  
-- Lấy mã hóa đơn vừa tạo qua SCOPE_IDENTITY().
-
-### 6. Ghi nhận chi tiết đơn hàng:
-
-- Chèn các dòng chi tiết đơn hàng từ bảng tạm @OrderProducts vào bảng Details, liên kết với hóa đơn vừa tạo qua Receipt_Id.
-
-### 7. Cập nhật tồn kho:
-
-- Giảm số lượng tồn kho trong bảng Product tương ứng với số lượng của sản phẩm đặt hàng.
-
-### 8. Giao dịch:
-
-- Tất cả các thao tác trên được thực hiện bên trong một giao dịch (BEGIN TRANSACTION và COMMIT TRANSACTION) để đảm bảo tính toàn vẹn dữ liệu. Nếu có lỗi bất kỳ, giao dịch sẽ được ROLLBACK trong khối CATCH.
-
 ------------------------------------
 
+## sp_ImportProducts
+
+
+- **Mục đích**: Xử lý quá trình nhập hàng từ nhà cung cấp, bao gồm cập nhật tồn kho, ghi nhận phiếu nhập hàng (Goods Receipt) và lưu trữ chi tiết nhập hàng.
+
+**Các bước thực hiện:**
+
+### 1. Kiểm tra và xử lý đầu vào:
+
+- Nhận chuỗi JSON chứa danh sách sản phẩm nhập hàng, gồm các trường `productId`, `quantity`, `price`, và `supplierId`.
+- Dữ liệu JSON được phân tích qua `OPENJSON` và tải vào bảng tạm `@ProductDetails`.
+- Kiểm tra xem bảng tạm có dữ liệu không (báo lỗi nếu danh sách trống).
+- Đảm bảo rằng tất cả sản phẩm có cùng `supplierId` và giá trị này không được để trống.
+
+### 2. Xác thực dữ liệu:
+
+- Kiểm tra sự tồn tại của nhà cung cấp (`Supplier`) dựa vào `supplierId` lấy từ danh sách.
+- Kiểm tra sự tồn tại của nhân viên (`Employee`) thực hiện thao tác nhập hàng.
+- Nếu bất kỳ điều kiện nào không hợp lệ, sử dụng `THROW` để ném lỗi.
+
+### 3. Giao dịch và ghi nhận phiếu nhập hàng:
+
+- Bắt đầu giao dịch với `BEGIN TRANSACTION` để đảm bảo tất cả các thao tác được thực hiện nguyên tử.
+- Tạo một bản ghi mới trong **Goods_Receipt** để lưu ngày nhập hàng và nhân viên nhập hàng.
+- Lấy mã phiếu nhập hàng mới tạo qua `SCOPE_IDENTITY()`.
+
+### 4. Kiểm tra tính hợp lệ của sản phẩm:
+
+- So sánh từng `ProductId` trong bảng tạm với bảng **Product**.
+- Nếu có sản phẩm không tồn tại, tổng hợp thông báo lỗi và `ROLLBACK TRANSACTION`.
+
+### 5. Ghi nhận chi tiết nhập hàng:
+
+- Chèn dữ liệu vào bảng **Details**, gồm thông tin sản phẩm, số lượng, giá nhập và liên kết với phiếu nhập hàng (`GoodsReceipt_Id`).
+
+### 6. Cập nhật tồn kho:
+
+- Tăng số lượng tồn kho của sản phẩm trong bảng **Product** bằng số lượng nhập từ danh sách.
+
+### 7. Kết thúc giao dịch:
+
+- Nếu tất cả các bước trên đều thành công, giao dịch được `COMMIT`.
+- Nếu có lỗi trong quá trình thực hiện, giao dịch sẽ được `ROLLBACK`.
+
+### 8. Trả thông tin kết quả:
+
+- Truy vấn bảng **Goods_Receipt**, **Supplier**, **Employee**, và **Details** để trả về thông tin tổng hợp của phiếu nhập hàng.
+- Truy vấn chi tiết từng sản phẩm nhập gồm số lượng, đơn giá, và tổng giá trị nhập.
+
+---
+
+## Đặc điểm kỹ thuật
+
+- **Tính toàn vẹn dữ liệu**:
+  - Sử dụng transaction để đảm bảo rằng dữ liệu được cập nhật hợp lệ và có thể quay lui nếu có lỗi.
+  - Kiểm tra tính hợp lệ của dữ liệu đầu vào trước khi thực hiện cập nhật vào database.
+  - Kiểm soát lỗi bằng cách sử dụng `THROW` và `TRY...CATCH`.
+
+- **Tối ưu hóa hiệu suất**:
+  - Sử dụng JSON để truyền danh sách sản phẩm, giúp đơn giản hóa quá trình xử lý dữ liệu.
+  - Cập nhật tồn kho một cách hiệu quả bằng `INNER JOIN` giữa bảng **Product** và bảng tạm chứa sản phẩm nhập.
+  - Sử dụng `SCOPE_IDENTITY()` để lấy ID mới tạo thay vì `@@IDENTITY`, tránh lỗi khi có triggers.
+
+---
 
 
