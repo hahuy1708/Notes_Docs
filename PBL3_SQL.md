@@ -150,5 +150,41 @@ ON DELETE CASCADE
 -> Nếu một phiếu nhập hàng (Goods_Receipt) bị xóa, hoặc một hóa đơn (Receipt) bị xóa, thì các chi tiết liên quan trong bảng Details sẽ bị xóa tự động. Điều này giúp tránh trường hợp tồn tại các dòng chi tiết mà không còn phiếu nhập hay hóa đơn làm chủ.
 
 
+### WITH NOCHECK - WITH CHECK
+
+- **WITH NOCHECK** Được sử dụng khi thêm ràng buộc (`FOREIGN KEY`, `CHECK`), giúp **bỏ qua việc kiểm tra dữ liệu hiện có** nhưng vẫn áp dụng ràng buộc cho dữ liệu mới.  
+-> Không kiểm tra các bản ghi hiện có để đảm bảo chúng tuân thủ ràng buộc mới.
+ 
+- **WITH CHECK**: Kiểm tra dữ liệu hiện có trước khi áp dụng ràng buộc.Đảm bảo tất cả các Account_Id của nhân viên đều hợp lệ.
+
+
+# Mối quan hệ và ràng buộc khóa ngoại
+
+1. Employee - Account (1-1): 
+Mỗi nhân viên (Employee) có một tài khoản đăng nhập (Account).
+2. Goods_Receipt - Employee (1-N): 
+Một nhân viên (Employee) có thể lập nhiều phiếu nhập hàng (Goods_Receipt).
+3. laptop - Product, PC - Product (1-1):
+Một sản phẩm (Product) có thể là Laptop hoặc PC, nhưng mỗi sản phẩm chỉ thuộc một loại.
+4. Product - Supplier (N-1): 
+Một nhà cung cấp (Supplier) có thể cung cấp nhiều sản phẩm (Product)
+5. Receipt - Customer, Receipt - Employee (1-N):
+Một khách hàng (Customer) có thể tạo nhiều hóa đơn (Receipt).
+Một nhân viên (Employee) có thể phụ trách nhiều hóa đơn.
+
+
+```sql
+ALTER TABLE [dbo].[Details] WITH NOCHECK ADD CHECK (([productPrice]>=(0)))
+GO
+ALTER TABLE [dbo].[Details] WITH NOCHECK ADD CHECK (([quantity]>(0)))
+GO
+```
+
+- Đảm bảo rằng giá sản phẩm (productPrice) không thể nhỏ hơn 0 (giá không hợp lệ).
+- Đảm bảo rằng số lượng (quantity) phải lớn hơn 0 (không thể mua/bán số lượng âm).
+- Giúp duy trì tính hợp lệ của dữ liệu.
+
+
+
 
 
