@@ -1,4 +1,4 @@
-# Stored Procedure
+# Stored Procedure - Transaction
 
 ## sp_CreateOrder
 
@@ -100,8 +100,6 @@
 - Truy vấn bảng **Goods_Receipt**, **Supplier**, **Employee**, và **Details** để trả về thông tin tổng hợp của phiếu nhập hàng.
 - Truy vấn chi tiết từng sản phẩm nhập gồm số lượng, đơn giá, và tổng giá trị nhập.
 
----
-
 ## Đặc điểm kỹ thuật
 
 - **Tính toàn vẹn dữ liệu**:
@@ -114,6 +112,43 @@
   - Cập nhật tồn kho một cách hiệu quả bằng `INNER JOIN` giữa bảng **Product** và bảng tạm chứa sản phẩm nhập.
   - Sử dụng `SCOPE_IDENTITY()` để lấy ID mới tạo thay vì `@@IDENTITY`, tránh lỗi khi có triggers.
 
----
+------------------------------------
+# Cascade
+
+- Khi một bản ghi trong bảng cha (bảng chứa khóa chính) bị xóa, các bản ghi liên quan trong bảng con (bảng chứa khóa ngoại) sẽ tự động bị xóa theo. Điều này giúp đảm bảo rằng sau khi xóa bản ghi cha, không còn các bản ghi "mồ côi" (orphan records) vi phạm tính toàn vẹn của dữ liệu.
+
+1.  Bảng Accessories, Laptop, PC và Product:
+
+```sql
+ALTER TABLE [dbo].[Accessories] WITH NOCHECK ADD FOREIGN KEY([Product_Id])
+REFERENCES [dbo].[Product] ([Product_Id])
+ON DELETE CASCADE
+ALTER TABLE [dbo].[Laptop] WITH NOCHECK ADD FOREIGN KEY([Product_Id])
+REFERENCES [dbo].[Product] ([Product_Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[PC] WITH NOCHECK ADD FOREIGN KEY([Product_Id])
+REFERENCES [dbo].[Product] ([Product_Id])
+ON DELETE CASCADE
+```
+->  Khi một sản phẩm trong bảng Product bị xóa, các bản ghi tương ứng trong bảng Accessories,Laptop, PC (liên kết với sản phẩm đó) sẽ tự động bị xóa. Qua đó, đảm bảo không có phụ kiện liên kết tới một sản phẩm không tồn tại nữa.
+
+2. Bảng Details liên kết với Goods_Receipt và Receipt:
+
+```sql
+ALTER TABLE [dbo].[Accessories] WITH NOCHECK ADD FOREIGN KEY([Product_Id])
+REFERENCES [dbo].[Product] ([Product_Id])
+ON DELETE CASCADE
+ALTER TABLE [dbo].[Laptop] WITH NOCHECK ADD FOREIGN KEY([Product_Id])
+REFERENCES [dbo].[Product] ([Product_Id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[PC] WITH NOCHECK ADD FOREIGN KEY([Product_Id])
+REFERENCES [dbo].[Product] ([Product_Id])
+ON DELETE CASCADE
+```
+-> Nếu một phiếu nhập hàng (Goods_Receipt) bị xóa, hoặc một hóa đơn (Receipt) bị xóa, thì các chi tiết liên quan trong bảng Details sẽ bị xóa tự động. Điều này giúp tránh trường hợp tồn tại các dòng chi tiết mà không còn phiếu nhập hay hóa đơn làm chủ.
+
+
 
 
